@@ -11,37 +11,50 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Echoes.SampleApp">
 
-    <DockPanel>
-        <UniformGrid DockPanel.Dock="Bottom" Columns="3" Rows="1">
-            <Button Command="{Binding SetCultureCommand}" CommandParameter="english">
-                English
-            </Button>
-            <Button Command="{Binding SetCultureCommand}" CommandParameter="german">
-                German
-            </Button>
-            <Button Command="{Binding SetCultureCommand}" CommandParameter="chinese">
-                Chinese
-            </Button>
-        </UniformGrid>
+	<DockPanel>
+		<UniformGrid DockPanel.Dock="Bottom" Columns="3" Rows="1">
+			<Button Command="{Binding SetCultureCommand}" CommandParameter="english">
+				English
+			</Button>
+			<Button Command="{Binding SetCultureCommand}" CommandParameter="german">
+				German
+			</Button>
+			<Button Command="{Binding SetCultureCommand}" CommandParameter="chinese">
+				Chinese
+			</Button>
+		</UniformGrid>
 
-        <DockPanel
+        <StackPanel DockPanel.Dock="Top">
+            <TextBlock
+                Text="{echoes:Translate {x:Static translations:Strings.greeting}, Sun }" />
+            <TextBlock
+                Text="{echoes:Translate {x:Static translations:Strings.greeting2}, Sun, Moon }" />
+            <TextBlock
+                Text="{echoes:Translate {x:Static translations:Strings.greeting3}, Sun, Moon, Star }" />
+        </StackPanel>
+		<DockPanel
             DockPanel.Dock="Top">
 
-            <TextBlock
-                Text="{echoes:Translate {x:Static translations:Strings.greeting}, {Binding Name} }" />
-
-            <TextBox
+            <StackPanel>
+				<TextBlock
+					Text="{echoes:Translate {x:Static translations:Strings.greeting}, {Binding Name}, {Binding Name} }" />
+				<TextBlock
+							 Text="{echoes:Translate {x:Static translations:Strings.greeting2}, {Binding Name}, {Binding Name} }" />
+				<TextBlock
+							 Text="{echoes:Translate {x:Static translations:Strings.greeting3}, {Binding Name}, {Binding Name}, {Binding Name} }" />
+			</StackPanel>
+			<TextBox
                 Text="{Binding Name}" />
 
-        </DockPanel>
+		</DockPanel>
 
-        <ContentControl
+		<ContentControl
             DockPanel.Dock="Top"
             HorizontalContentAlignment="Center"
             VerticalContentAlignment="Center">
-            <TextBlock
+			<TextBlock
                 FontSize="64"
                 Text="{echoes:Translate {x:Static translations:Strings.hello_world}}" />
-        </ContentControl>
-    </DockPanel>
+		</ContentControl>
+	</DockPanel>
 </Window>
