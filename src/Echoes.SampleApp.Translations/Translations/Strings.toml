@@ -5,3 +5,5 @@ generated_namespace = "Echoes.SampleApp.Translations"
 [translations]
 hello_world = 'Hello World'
 greeting = 'Hello {0}, how are you?'
+greeting2 = 'Hello {0} and {1}, how are you?'
+greeting3 = 'Hello {0}, {1} and {2}, how are you?'
