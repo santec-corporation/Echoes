@@ -7,38 +7,32 @@ namespace Echoes;
 
 public static class TranslationProvider
 {
-    private static CultureInfo _culture;
-    private static ConcurrentDictionary<string, FileTranslationProvider> _providers;
-
-    public static event EventHandler<CultureInfo> OnCultureChanged;
-
-    public static CultureInfo Culture => _culture;
+    private static readonly ConcurrentDictionary<string, FileTranslationProvider> Providers;
 
     static TranslationProvider()
     {
-        _culture = CultureInfo.CurrentUICulture;
-        _providers = new ConcurrentDictionary<string, FileTranslationProvider>();
+        Culture = CultureInfo.CurrentUICulture;
+        Providers = new ConcurrentDictionary<string, FileTranslationProvider>();
     }
+
+    public static CultureInfo Culture { get; private set; }
+
+    public static event EventHandler<CultureInfo>? OnCultureChanged;
 
     public static void SetCulture(CultureInfo culture)
     {
-        _culture = culture;
-        OnCultureChanged?.Invoke(null, _culture);
+        Culture = culture;
+        OnCultureChanged?.Invoke(null, Culture);
     }
 
     public static string? ReadTranslation(Assembly assembly, string file, string key, CultureInfo culture)
     {
-        if (_providers.TryGetValue(file, out var provider))
-        {
-            return provider.ReadTranslation(key, culture);
-        }
-        else
-        {
-            var newProvider =  new FileTranslationProvider(assembly, file);
+        if (Providers.TryGetValue(file, out var provider)) return provider.ReadTranslation(key, culture);
 
-            _providers.TryAdd(file, newProvider);
+        provider = new FileTranslationProvider(assembly, file);
 
-            return newProvider.ReadTranslation(key, culture);
-        }
+        Providers[file] = provider;
+
+        return provider.ReadTranslation(key, culture);
     }
 }

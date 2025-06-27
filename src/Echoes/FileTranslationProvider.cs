@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.IO;
@@ -8,57 +9,31 @@ using Tommy;
 
 namespace Echoes;
 
-public class FileTranslationProvider
+public class FileTranslationProvider(Assembly assembly, string embeddedResourceKey)
 {
-    private readonly string _embeddedResourceKey;
-    private readonly Assembly _assembly;
-
-    private readonly ImmutableDictionary<string, string> _invariantTranslations;
-    private (CultureInfo Culture, ImmutableDictionary<string, string> Lookup)? _translations;
-
-    public FileTranslationProvider(Assembly assembly, string embeddedResourceKey)
-    {
-        _embeddedResourceKey = embeddedResourceKey;
-        _assembly = assembly;
-
-        _invariantTranslations =
-            ReadResource(assembly, embeddedResourceKey)
-            ?? throw new Exception("Embedded resource could not be found. ");
-
-        _translations = null;
-    }
+    private readonly ImmutableDictionary<string, string> _invariantTranslations = ReadResource(assembly, embeddedResourceKey)
+                                                                                  ?? throw new Exception("Embedded resource could not be found. ");
+    private (CultureInfo Culture, ImmutableDictionary<string, string> Lookup)? _translations = null;
 
     public string? ReadTranslation(string key, CultureInfo culture)
     {
-        if (culture == null)
-            throw new ArgumentNullException(nameof(culture));
+        ArgumentNullException.ThrowIfNull(culture);
 
         var lookup = _translations?.Lookup;
         var lookupCulture = _translations?.Culture;
 
         if (lookup == null || (!lookupCulture?.Equals(culture) ?? false))
         {
-            var fileName = Path.GetFileNameWithoutExtension(_embeddedResourceKey);
+            var fileName = Path.GetFileNameWithoutExtension(embeddedResourceKey);
             var fullName = fileName + "_" + culture.TwoLetterISOLanguageName + ".toml";
 
-            var fullMatch = ReadResource(_assembly, fullName) ?? ImmutableDictionary<string, string>.Empty;
+            var fullMatch = ReadResource(assembly, fullName) ?? ImmutableDictionary<string, string>.Empty;
             _translations = (culture, fullMatch);
 
             lookup = fullMatch;
         }
 
-        if (lookup!.TryGetValue(key, out var result))
-        {
-            return result;
-        }
-        else if (_invariantTranslations.TryGetValue(key, out var invariantResult))
-        {
-            return invariantResult;
-        }
-        else
-        {
-            return null;
-        }
+        return lookup.TryGetValue(key, out var result) ? result : CollectionExtensions.GetValueOrDefault(_invariantTranslations, key);
     }
 
     private static ImmutableDictionary<string, string>? ReadResource(Assembly assembly, string file)
@@ -67,7 +42,8 @@ public class FileTranslationProvider
 
         var resourcePath =
             resourceNames
-                .FirstOrDefault(str => str.EndsWith(file.Replace("/", ".").Replace(@"\", "."), StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(str =>
+                    str.EndsWith(file.Replace("/", ".").Replace(@"\", "."), StringComparison.OrdinalIgnoreCase));
 
         if (resourcePath == null)
             return null;
@@ -86,12 +62,8 @@ public class FileTranslationProvider
             var immutableDict = ImmutableDictionary.CreateBuilder<string, string>();
 
             foreach (var pair in translations.AsTable.RawTable)
-            {
                 if (pair.Value.IsString)
-                {
                     immutableDict.Add(pair.Key, pair.Value.AsString);
-                }
-            }
 
             return immutableDict.ToImmutable();
         }
@@ -100,12 +72,8 @@ public class FileTranslationProvider
             var immutableDict = ImmutableDictionary.CreateBuilder<string, string>();
 
             foreach (var pair in root.RawTable)
-            {
                 if (pair.Value.IsString)
-                {
                     immutableDict.Add(pair.Key, pair.Value.AsString);
-                }
-            }
 
             return immutableDict.ToImmutable();
         }
