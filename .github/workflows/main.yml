@@ -1,13 +1,29 @@
 name: Build, Test and Publish release
 
 on:
+  workflow_dispatch: # Allow running the workflow manually from the GitHub UI
   push:
-    branches: [ main ]
+    branches:
+      - 'release/*'       # Run the workflow when pushing to the release branch
+    tags:
+      - 'v*'              # Run the workflow when pushing a tag that starts with 'v'
+  release:
+    types:
+      - published    # Run the workflow when a new GitHub release is published
+
+env:
+  NAMESPACE: santec-corporation
+  NuGetDirectory: ${{ github.workspace }}/nuget
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+defaults:
+  run:
+    shell: pwsh
 
 jobs:
   build:
 
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -15,10 +31,10 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: |
-          8.x.x
-          
-      
+        source-url: https://nuget.pkg.github.com/${{ env.NAMESPACE }}/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Use the GitHub token to authenticate with the NuGet source
+    
     - name: install workloads
       run: dotnet workload restore src/Echoes.sln
       
@@ -29,4 +45,4 @@ jobs:
       run: dotnet build src/Echoes.Generator/Echoes.Generator.csproj -c Release
       
     - name: Publish Packages (if this version was not published before)
-      run: dotnet nuget push src/**/bin/Release/*.nupkg -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      run: dotnet nuget push src/**/bin/Release/*.nupkg --skip-duplicate
