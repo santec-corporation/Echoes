@@ -10,47 +10,58 @@ using Avalonia.Markup.Xaml;
 
 namespace Echoes;
 
-public sealed class Translate(TranslationUnit unit, params object?[] args) : MarkupExtension
+public sealed class Translate(TranslationUnit unit) : MarkupExtension
 {
+    private readonly object[] args = [];
     private readonly IBinding[] bindings = [];
     private readonly IBinding formatBinding = unit.Value.ToBinding();
 
-    public Translate(TranslationUnit unit) : this(unit, [])
+    public Translate(TranslationUnit unit, object obj1) : this(unit)
     {
+        args = [obj1];
+        bindings = [formatBinding, .. CheckTypes(args)];
     }
 
-    public Translate(TranslationUnit unit, BindingBase binding1) : this(unit, [])
+    public Translate(TranslationUnit unit, object obj1, object obj2) : this(unit)
     {
-        bindings = [formatBinding, binding1];
+        args = [obj1, obj2];
+        bindings = [formatBinding, .. CheckTypes(args)];
     }
 
-    public Translate(TranslationUnit unit, BindingBase binding1, BindingBase binding2) : this(unit, [])
+    public Translate(TranslationUnit unit, object obj1, object obj2, object obj3) :
+        this(unit)
     {
-        bindings = [formatBinding, binding1, binding2];
+        args = [obj1, obj2, obj3];
+        bindings = [formatBinding, .. CheckTypes(args)];
     }
 
-    public Translate(TranslationUnit unit, BindingBase binding1, BindingBase binding2, BindingBase binding3) :
-        this(unit, [])
+    public Translate(TranslationUnit unit, object obj1, object obj2, object obj3,
+        object obj4) : this(unit)
     {
-        bindings = [formatBinding, binding1, binding2, binding3];
+        args = [obj1, obj2, obj3, obj4];
+        bindings = [formatBinding, .. CheckTypes(args)];
     }
 
-    public Translate(TranslationUnit unit, BindingBase binding1, BindingBase binding2, BindingBase binding3,
-        BindingBase binding4) : this(unit, [])
+    public Translate(TranslationUnit unit, object obj1, object obj2, object obj3,
+        object obj4, object obj5) : this(unit)
     {
-        bindings = [formatBinding, binding1, binding2, binding3, binding4];
+        args = [obj1, obj2, obj3, obj4, obj5];
+        bindings = [formatBinding, .. CheckTypes(args)];
     }
 
-    public Translate(TranslationUnit unit, BindingBase binding1, BindingBase binding2, BindingBase binding3,
-        BindingBase binding4, BindingBase binding5) : this(unit, [])
+    public Translate(TranslationUnit unit, object obj1, object obj2, object obj3,
+        object obj4, object obj5, object obj6) : this(unit)
     {
-        bindings = [formatBinding, binding1, binding2, binding3, binding4, binding5];
+        args = [obj1, obj2, obj3, obj4, obj5, obj6];
+        bindings = [formatBinding, .. CheckTypes(args)];
     }
 
-    public Translate(TranslationUnit unit, BindingBase binding1, BindingBase binding2, BindingBase binding3,
-        BindingBase binding4, BindingBase binding5, BindingBase binding6) : this(unit, [])
+    private static IBinding[] CheckTypes(object[] args)
     {
-        bindings = [formatBinding, binding1, binding2, binding3, binding4, binding5, binding6];
+        if (!args.Any(arg => arg is BindingBase)) return [];
+
+        if (!args.All(arg => arg is BindingBase)) throw new Exception("Cannot mix bindings with variables");
+        return [.. args.OfType<BindingBase>()];
     }
 
     public override object ProvideValue(IServiceProvider serviceProvider)
@@ -60,18 +71,16 @@ public sealed class Translate(TranslationUnit unit, params object?[] args) : Mar
         //var targetProperty = target.TargetProperty as AvaloniaProperty;
         //var targetType = targetProperty?.PropertyType;
 
-        return (bindings.Length, args.Length) switch
-        {
-            (0, 0) => formatBinding,
-            (_, > 0) => unit.Value.Select(str => string.IsNullOrEmpty(str) ? str : string.Format(str, args))
-                .ToBinding(),
-            (> 0, _) => new MultiBinding
+        if (bindings.Length > 1)
+            return new MultiBinding
             {
                 Bindings = bindings,
                 Converter = BindingConverter.Instance
-            },
-            _ => formatBinding
-        };
+            };
+
+        return unit.Value
+            .Select(str => string.IsNullOrEmpty(str) ? str : string.Format(str, args))
+            .ToBinding();
     }
 
     private class BindingConverter : IMultiValueConverter
