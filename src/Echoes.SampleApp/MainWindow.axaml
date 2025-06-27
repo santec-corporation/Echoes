@@ -28,10 +28,10 @@
             DockPanel.Dock="Top">
 
             <TextBlock
-                Text="{echoes:Translate {x:Static translations:Strings.greeting}}"/>
+                Text="{echoes:Translate {x:Static translations:Strings.greeting}, {Binding Name} }" />
 
             <TextBox
-                Text="{Binding Name}"/>
+                Text="{Binding Name}" />
 
         </DockPanel>
 
@@ -41,7 +41,7 @@
             VerticalContentAlignment="Center">
             <TextBlock
                 FontSize="64"
-                Text="{echoes:Translate {x:Static translations:Strings.hello_world}}"/>
+                Text="{echoes:Translate {x:Static translations:Strings.hello_world}}" />
         </ContentControl>
     </DockPanel>
 </Window>

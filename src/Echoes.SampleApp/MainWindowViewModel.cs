@@ -15,6 +15,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _name, value);
     }
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     public void SetCultureCommand(object parameter)
     {
         switch (parameter)
@@ -32,8 +34,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
                 break;
         }
     }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
