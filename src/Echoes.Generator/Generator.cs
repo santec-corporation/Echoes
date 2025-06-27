@@ -25,7 +25,7 @@ public class Generator : IIncrementalGenerator
         var projectDirProvider = context.AnalyzerConfigOptionsProvider
             .Select((provider, _) =>
             {
-                provider.GlobalOptions.TryGetValue("build_property.MSBuildProjectDirectory", out var projectDir);
+                provider.GlobalOptions.TryGetValue("build_property.projectdir", out var projectDir);
                 return projectDir ?? string.Empty;
             });
 
