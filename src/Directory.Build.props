@@ -1,6 +1,11 @@
 <Project>
-    <PropertyGroup>
-        <AvaloniaVersion>11.1.0</AvaloniaVersion>
-        <EchoesVersion>0.1.4</EchoesVersion>
-    </PropertyGroup>
+	<PropertyGroup>
+		<AvaloniaVersion>11.3.2</AvaloniaVersion>
+		<EchoesVersion>0.1.4</EchoesVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+	</ItemGroup>
+
 </Project>
