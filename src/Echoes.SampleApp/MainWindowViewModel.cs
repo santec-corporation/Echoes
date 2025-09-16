@@ -15,25 +15,32 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _name, value);
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
+    public string CurrentCulture => TranslationProvider.Culture.Name;
 
     public void SetCultureCommand(object parameter)
     {
         switch (parameter)
         {
-            case "english":
+            case "en":
                 TranslationProvider.SetCulture(CultureInfo.GetCultureInfo("en-US"));
                 break;
 
-            case "german":
-                TranslationProvider.SetCulture(CultureInfo.GetCultureInfo("de-DE"));
+            case "de":
+                TranslationProvider.SetCulture(CultureInfo.GetCultureInfo("de"));
                 break;
 
-            case "chinese":
+            case "de-AT":
+                TranslationProvider.SetCulture(CultureInfo.GetCultureInfo("de-AT"));
+                break;
+
+            case "zh":
                 TranslationProvider.SetCulture(CultureInfo.GetCultureInfo("zh-CN"));
                 break;
         }
+        OnPropertyChanged(nameof(CurrentCulture));
     }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
