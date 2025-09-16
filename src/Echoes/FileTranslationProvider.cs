@@ -1,10 +1,10 @@
+using Echoes.Common;
 using System;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Tommy;
 
 namespace Echoes;
 
@@ -14,7 +14,7 @@ public class FileTranslationProvider
     private readonly Assembly _assembly;
 
     private readonly ImmutableDictionary<string, string> _invariantTranslations;
-    private (CultureInfo Culture, ImmutableDictionary<string, string> Lookup)? _translations;
+    private (CultureInfo Culture, ImmutableDictionary<string, string>? SpecificLookup, ImmutableDictionary<string, string>? LanguageLookup)? _translations;
 
     public FileTranslationProvider(Assembly assembly, string embeddedResourceKey)
     {
@@ -28,43 +28,69 @@ public class FileTranslationProvider
         _translations = null;
     }
 
-    public string? ReadTranslation(string key, CultureInfo culture)
+    public string ReadTranslation(string key, CultureInfo culture)
     {
         if (culture == null)
             throw new ArgumentNullException(nameof(culture));
 
-        var lookup = _translations?.Lookup;
-        var lookupCulture = _translations?.Culture;
+        var cachedCulture = _translations?.Culture;
 
-        if (lookup == null || (!lookupCulture?.Equals(culture) ?? false))
+        // Check if we need to reload translations for a different culture
+        if (_translations == null || (!cachedCulture?.Equals(culture) ?? false))
         {
             var fileName = Path.GetFileNameWithoutExtension(_embeddedResourceKey);
-            var fullName = fileName + "_" + culture.TwoLetterISOLanguageName + ".toml";
 
-            var fullMatch = ReadResource(_assembly, fullName) ?? ImmutableDictionary<string, string>.Empty;
-            _translations = (culture, fullMatch);
+            // Try to load the most specific culture file (e.g., de-AT)
+            ImmutableDictionary<string, string>? specificResource = null;
+            if (!string.IsNullOrEmpty(culture.Name))
+            {
+                var specificFileName = $"{fileName}_{culture.Name}.toml";
+                specificResource = ReadResource(_assembly, specificFileName);
+            }
 
-            lookup = fullMatch;
+            // Try to load the language-only culture file (e.g., de)
+            ImmutableDictionary<string, string>? languageResource = null;
+            if (!string.IsNullOrEmpty(culture.TwoLetterISOLanguageName) &&
+                culture.TwoLetterISOLanguageName != culture.Name) // Only if different from specific
+            {
+                var languageFileName = $"{fileName}_{culture.TwoLetterISOLanguageName}.toml";
+                languageResource = ReadResource(_assembly, languageFileName);
+            }
+
+            // Store both lookups
+            _translations = (
+                culture,
+                specificResource,
+                languageResource
+            );
         }
 
-        if (lookup!.TryGetValue(key, out var result))
+        // Try to find the translation in order of specificity
+        // 1. Most specific locale (e.g., de-AT)
+        if (_translations?.SpecificLookup?.TryGetValue(key, out var specificResult) == true)
         {
-            return result;
+            return specificResult;
         }
-        else if (_invariantTranslations.TryGetValue(key, out var invariantResult))
+
+        // 2. Language-only locale (e.g., de)
+        if (_translations?.LanguageLookup?.TryGetValue(key, out var languageResult) == true)
+        {
+            return languageResult;
+        }
+
+        // 3. Invariant culture (fallback)
+        if (_invariantTranslations.TryGetValue(key, out var invariantResult))
         {
             return invariantResult;
         }
-        else
-        {
-            return null;
-        }
+
+        // This should never happen
+        return "TRANSLATION NOT FOUND: " + key;
     }
 
     private static ImmutableDictionary<string, string>? ReadResource(Assembly assembly, string file)
     {
         var resourceNames = assembly.GetManifestResourceNames();
-
         var resourcePath =
             resourceNames
                 .FirstOrDefault(str => str.EndsWith(file.Replace("/", ".").Replace(@"\", "."), StringComparison.OrdinalIgnoreCase));
@@ -73,41 +99,13 @@ public class FileTranslationProvider
             return null;
 
         using var stream = assembly.GetManifestResourceStream(resourcePath);
-
         if (stream == null)
             return null;
 
         using var reader = new StreamReader(stream);
+        var tomlContent = reader.ReadToEnd();
 
-        var root = TOML.Parse(reader);
-
-        if (root.RawTable.TryGetValue("translations", out var translations))
-        {
-            var immutableDict = ImmutableDictionary.CreateBuilder<string, string>();
-
-            foreach (var pair in translations.AsTable.RawTable)
-            {
-                if (pair.Value.IsString)
-                {
-                    immutableDict.Add(pair.Key, pair.Value.AsString);
-                }
-            }
-
-            return immutableDict.ToImmutable();
-        }
-        else
-        {
-            var immutableDict = ImmutableDictionary.CreateBuilder<string, string>();
-
-            foreach (var pair in root.RawTable)
-            {
-                if (pair.Value.IsString)
-                {
-                    immutableDict.Add(pair.Key, pair.Value.AsString);
-                }
-            }
-
-            return immutableDict.ToImmutable();
-        }
+        // Use the shared parser to get translations as a flat dictionary
+        return TomlTranslationParser.ParseTranslations(tomlContent);
     }
 }

@@ -1,141 +1,112 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.IO;
-using System.Text;
+using Echoes.Common;
 using Microsoft.CodeAnalysis;
-using Tommy;
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
 
 namespace Echoes.Generator;
 
 [Generator]
-public class Generator : ISourceGenerator
+public class Generator : IIncrementalGenerator
 {
-    public record InvariantLanguageFile
+    private record InvariantLanguageFile
     {
         public string ProjectRelativeTomlFilePath { get; }
         public string GeneratorNamespace { get; }
         public string GeneratorClassName { get; }
-        public ImmutableArray<string> Units { get; }
+        public TomlTranslationParser.TranslationGroup RootGroup { get; }
 
         public InvariantLanguageFile
         (
             string projectRelativeTomlFilePath,
             string generatorNamespace,
             string generatorClassName,
-            ImmutableArray<string> units
+            TomlTranslationParser.TranslationGroup rootGroup
         )
         {
             ProjectRelativeTomlFilePath = projectRelativeTomlFilePath;
             GeneratorNamespace = generatorNamespace;
             GeneratorClassName = generatorClassName;
-            Units = units;
+            RootGroup = rootGroup;
         }
     }
 
-    public void Initialize(GeneratorInitializationContext context)
+    public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        IncrementalValueProvider<string> projectDirProvider = context.AnalyzerConfigOptionsProvider
+           .Select((provider, cancellationToken) =>
+           {
+               // Try to get the value from MSBuild properties.
+               provider.GlobalOptions.TryGetValue("build_property.projectdir", out var projectDir);
+               return projectDir ?? string.Empty;
+           });
 
-    }
+        IncrementalValuesProvider<AdditionalText> translationFiles = context.AdditionalTextsProvider.Where(IsFileRelevant);
 
-    public void Execute(GeneratorExecutionContext context)
-    {
-        var translationFiles = FindRelevantFiles(context.AdditionalFiles);
+        var combinedProvider = translationFiles.Combine(projectDirProvider);
 
-        foreach (var file in translationFiles)
+        IncrementalValuesProvider<(string fileName, string content)> fileContents = combinedProvider.Select((source, cancellationToken) =>
         {
-            GenerateKeysFile(file, context);
-        }
-    }
+            (AdditionalText text, string projectDir) = source;
 
-    private static ImmutableArray<AdditionalText> FindRelevantFiles(ImmutableArray<AdditionalText> additionalFiles)
-    {
-        var translationFiles = new List<AdditionalText>();
+            var fileName = Path.GetFileNameWithoutExtension(text.Path);
+            var content = GenerateKeysFileText(text, projectDir);
 
-        foreach (var additionalFile in additionalFiles)
+            return (fileName, content);
+        });
+
+        context.RegisterSourceOutput(fileContents, static (spc, data) =>
         {
-            if (additionalFile == null)
-                continue;
-
-            if (!additionalFile.Path.EndsWith(".toml"))
-                continue;
-
-            var text = additionalFile.GetText();
-
-            if (text == null)
-                continue;
-
-            var stringText = text.ToString();
-
-            if (stringText.Contains("[echoes_config]"))
-                translationFiles.Add(additionalFile);
-
-        }
-
-        return translationFiles.ToImmutableArray();
+            var (fileName, sourceCode) = data;
+            spc.AddSource($"{fileName}.g.cs", sourceCode);
+        });
     }
 
-    private static InvariantLanguageFile? ParseTomlFiles(AdditionalText translationFile, GeneratorExecutionContext context)
+    private static bool IsFileRelevant(AdditionalText? additionalFile)
     {
-        var keys = new List<string>();
+        if (additionalFile == null)
+            return false;
 
+        if (!additionalFile.Path.EndsWith(".toml"))
+            return false;
+
+        var text = additionalFile.GetText();
+
+        if (text == null)
+            return false;
+
+        var stringText = text.ToString();
+
+        return stringText.Contains($"[{TomlTranslationParser.ConfigSectionName}]");
+    }
+
+    private static InvariantLanguageFile? ParseTomlFiles(AdditionalText translationFile, string projectDir)
+    {
         var text = translationFile.GetText()?.ToString() ?? string.Empty;
-        var reader = new StringReader(text);
-        var parser = new TOMLParser(reader);
-        var root = parser.Parse();
 
-        if (!root.RawTable.TryGetValue("echoes_config", out var echoesConfig))
+        var config = TomlTranslationParser.ParseConfig(text);
+        if (config == null)
             return null;
 
-        if (!echoesConfig.IsTable)
-            return null;
+        // Build the nested structure
+        var rootGroup = TomlTranslationParser.BuildTranslationStructure(text);
 
-        if (!echoesConfig.AsTable.RawTable.TryGetValue("generated_class_name", out var generatedClassName))
-            return null;
-
-        if (!generatedClassName.IsString)
-            return null;
-
-        if (!echoesConfig.AsTable.RawTable.TryGetValue("generated_namespace", out var generatedNamespace))
-            return null;
-
-        if (!generatedNamespace.IsString)
-            return null;
-
-        var projectFolder = context.GetCallingPath();
-        var sourceFile = translationFile.Path;
-
-        var trimmedSourceFile = sourceFile;
-
-        if (sourceFile.StartsWith(projectFolder))
-        {
-            trimmedSourceFile = sourceFile.Substring(projectFolder.Length);
-        }
-
-        if (!root.RawTable.TryGetValue("translations", out var translations))
-            return null;
-
-        foreach (var pair in translations.AsTable.RawTable)
-        {
-            if (pair.Value.IsString)
-            {
-                  keys.Add(pair.Key);
-            }
-        }
-
-        var units = keys.ToImmutableArray();
+        var trimmedSourceFile = translationFile.Path.StartsWith(projectDir)
+            ? translationFile.Path.Substring(projectDir.Length)
+            : translationFile.Path;
 
         return new InvariantLanguageFile(
             trimmedSourceFile,
-            generatedNamespace.AsString,
-            generatedClassName.AsString,
-            units
+            config.GeneratedNamespace,
+            config.GeneratedClassName,
+            rootGroup
         );
     }
 
-    private static void GenerateKeysFile (AdditionalText translationFile, GeneratorExecutionContext context)
+    private static string GenerateKeysFileText(AdditionalText translationFile, string projectDir)
     {
-        var file = ParseTomlFiles(translationFile, context);
+        var file = ParseTomlFiles(translationFile, projectDir);
 
         if (file == null)
             throw new Exception("Failed to parse translation file");
@@ -156,15 +127,32 @@ public class Generator : ISourceGenerator
         sb.AppendLine($"\tprivate static readonly string _file = @\"{file.ProjectRelativeTomlFilePath}\";");
         sb.AppendLine($"\tprivate static readonly Assembly _assembly = typeof({file.GeneratorClassName}).Assembly;");
 
-        foreach (var key in file.Units)
-        {
-            sb.AppendLine($"\tpublic static TranslationUnit {key} => new TranslationUnit(_assembly, _file, \"{key}\");");
-        }
+        GenerateGroupContent(sb, file.RootGroup, 1);
 
         sb.AppendLine("}");
 
-        var text = sb.ToString();
+        return sb.ToString();
+    }
 
-        context.AddSource(file.GeneratorClassName + ".g.cs", text);
+    private static void GenerateGroupContent(StringBuilder sb, TomlTranslationParser.TranslationGroup group, int indentLevel)
+    {
+        var indent = new string('\t', indentLevel);
+
+        // Generate entries for this group
+        foreach (var entry in group.Entries.Values.OrderBy(e => e.Key))
+        {
+            sb.AppendLine($"{indent}public static TranslationUnit {entry.Key} => new TranslationUnit(_assembly, _file, \"{entry.FullPath}\");");
+        }
+
+        // Generate nested classes (sorted for consistent output)
+        foreach (var subGroup in group.SubGroups.Values.OrderBy(g => g.Name))
+        {
+            sb.AppendLine($"{indent}public static class {subGroup.Name}");
+            sb.AppendLine($"{indent}{{");
+
+            GenerateGroupContent(sb, subGroup, indentLevel + 1);
+
+            sb.AppendLine($"{indent}}}");
+        }
     }
 }
